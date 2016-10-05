@@ -4,6 +4,9 @@ using System;
 using System.Text.RegularExpressions;
 using System.Text;
 using System.Drawing;
+using MetadataExtractor;
+using MetadataExtractor.Formats.Exif;
+using System.Linq;
 
 namespace PhotoRename
 {
@@ -11,8 +14,11 @@ namespace PhotoRename
     {
         static void Main(string[] args)
         {
-            var curentDirectory = Directory.GetCurrentDirectory();
-            var files = Directory.GetFiles(curentDirectory, "File*.jpeg");
+            var curentDirectory = System.IO.Directory.GetCurrentDirectory();
+
+            var pattern = args.Length > 0 ? args[0] : "File*.jpeg";
+
+            var files = System.IO.Directory.GetFiles(curentDirectory, pattern);
             var length = files.Length;
             Console.WriteLine(string.Format("Found {0} file(s)", length));
 
@@ -21,6 +27,8 @@ namespace PhotoRename
             {
                 Console.WriteLine(string.Format("Processing file {0} of {1}. [{2}]", i, length, Path.GetFileName(file)));
                 var dateTime = GetDateTakenFromImage(file);
+                Console.WriteLine(string.Format("Detected datetime [{0}]", GetDateTakenFromExif(file)));
+
                 var newFile = GetNewFilename(dateTime);
                 var output = string.Format("Old: {0}\tNew: {1}", file, newFile);
                 //Console.Write(output);
@@ -31,6 +39,23 @@ namespace PhotoRename
                 i++;
             }
             
+        }
+        
+        private static DateTime GetDateTakenFromExif(string path)
+        {
+            using (FileStream fs = new FileStream(path, FileMode.Open, FileAccess.Read))
+            {
+                // Read all metadata from the image
+                var directories = ImageMetadataReader.ReadMetadata(fs);
+
+                // Find the so-called Exif "SubIFD" (which may be null)
+                var subIfdDirectory = directories.OfType<ExifSubIfdDirectory>().FirstOrDefault();
+
+                // Read the DateTime tag value
+                var dateTime = subIfdDirectory?.GetDateTime(ExifDirectoryBase.TagDateTimeOriginal);
+                
+                return dateTime.HasValue ? dateTime.Value : GetDateTakenFromFileName(path);
+            }
         }
 
         private static string ToZeroPaddedString(int num)
